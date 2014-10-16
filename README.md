@@ -9,11 +9,11 @@ Installation
 ============
 Create a Sencha CMD application project, open build.xml file and add the following line
 
-<import file="${basedir}/customlibs.xml"/>
+    <import file="${basedir}/customlibs.xml"/>
 
 **before**
 
-<import file="${basedir}/.sencha/app/build-impl.xml"/>
+    <import file="${basedir}/.sencha/app/build-impl.xml"/>
 
 Now you can use **customlibs** parameter in the _app.json_ - application build configuration file
 
