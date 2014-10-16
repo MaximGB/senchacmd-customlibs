@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="Sencha CMD custom libs support" default=".help">
+
+    <!--
+    Bryntum's customlibs extension for Sencha CMD, v1.0
+
+    © Bryntum AB, 2014 (http://bryntum.com)
+    Author: Maxim Bazhenov
+    Licence: MIT
+
+    Must be included before .sencha/app/build-impl.xml
+
+    Provides support for new app.json configuration property `customlibs`.
+    - Paths from customlibs.classpath are append to app.classpath at after init stage
+    - JS files from customlibs.js.prepend are injected into index.html (development version) before the bootstraping
+      code and are prepended to build result JS file at after js stage
+    - JS files from customlibs.js.append are injected into index.html (development version) after the bootstrapping
+      code and are appended to build result JS file at after js stage
+    - CSS files from customlibs.css.path are appended to build result CSS file at after SASS stage 
+        - `from` regexps in customlibs.css.replace are replaced with `to` patterns
+    - Files given in customlibs.resources.from are copied to customlibs.resources.to at after resources stage
+        - include designates file patterns to include
+        - exclude designates file patterns to exclude
+
+    Format is the following:
+
+    "customlibs" : [{
+
+        // Classpath to add to application classpath list
+        "classpath" : "../../../SecnhaCompatibleLibrary/js",
+
+        // Javascript file or files to append/prepend to the resulting JS file
+        // the option might be given as an array of objects as well
+        "js" : {
+
+            // Path to a file relative to the current project directory or absolute
+            "prepend" : "prepend.js",             
+
+            // Path to a file relative to the current project directory or absolute
+            "append"  : "append.js"
+        },
+
+        // CSS file or files to append to the resulting CSS file
+        // the option might be given as an array of objects as well
+        "css" : {
+            
+            // Path to a file relative to the current project directory or absolute
+            "path" : "../../../ExtScheduler2.x/resources/css/sch-all-debug.css",
+
+            // Replacement to execute during the concatenation, might be required to properly adjust image/font
+            // URLs to new CSS file base directory
+            "replace" : {
+
+                // Regular expression given as a string
+                "from" : "\\.\\./images",
+
+                // Substitution pattern
+                "to"   : "scheduler"
+            }
+        },
+
+        // Resources to copy
+        // the option might be given as an array of objects as well
+        "resources" : {
+
+            // Path to a library's resources directory relative to the current project directory or absolute
+            "from"    : "../../../ExtScheduler2.x/resources/images/",
+
+            // Destination path
+            "to"      : "build/production/${app.name}/resources/scheduler",
+
+            // Glob file patterns to include
+            "include" : "*",
+
+            // Glob file patterns to exclude
+            "exclude" : ".*"
+        }
+    }    -->
+
+    <target name="-after-init" depends="-bryntum-alter-classpath-with-custom-libs" />
+    <target name="-after-js" depends="-bryntum-append-prepend-js-from-custom-libs" />
+    <target name="-after-resources" depends="-bryntum-copy-resources-from-custom-libs" />
+    <target name="-after-sass" depends="-bryntum-append-styles-from-custom-libs" />
+    <target name="-after-page" depends="-bryntum-remove-customlibs-js-from-build-page" />
+
+    <target name="-bryntum-alter-classpath-with-custom-libs">
+        <script language="javascript">
+            <![CDATA[
+                var props = project.getProperties(),
+                    keys  = props.keys(),
+                    env   = project.getProperty('app.environment'),
+                    envInfix = (env == "production" ? "" : (env + "\\.")),
+                    customClassPathPropRexp = new RegExp("^app\\." + envInfix + "customlibs\\.\\d+\\.classpath$"),
+                    classPath = [project.getProperty('app.classpath')],
+                    key, value;
+
+                while (keys.hasMoreElements()) {
+                    key = keys.nextElement();
+                    if (customClassPathPropRexp.test(key)) {
+                        classPath.push(project.getProperty(key));
+                    }
+                } 
+                project.setProperty('app.classpath', classPath.join(','));
+            ]]>
+        </script>
+    </target>
+
+    <target name="-bryntum-append-prepend-js-from-custom-libs">
+        <script language="javascript">
+            <![CDATA[
+                var props = project.getProperties(),
+                    keys  = props.keys(),
+                    env   = project.getProperty('app.environment'),
+                    envInfix = (env == "production" ? "" : (env + "\\.")),
+                    customJsPrependPropRexp = new RegExp("^app\\." + envInfix + "customlibs\\.(\\d+)\\.js(?:\\.(\\d+))?\\.prepend"),
+                    customJsAppendPropRexp  = new RegExp("^app\\." + envInfix + "customlibs\\.(\\d+)\\.js(?:\\.(\\d+))?\\.append"),
+                    jss = [],
+                    buildOutJsPath = project.getProperty('build.out.js.path'),
+                    buildBootstrapPagePath = project.getProperty('build.bootstrap.page.path'),
+                    key, value, matches, prepend, append, prependScripts, appendScripts,
+                    concat, concatSourceFiles, concatSourceFileset, concatSourceFile, concatDestFile,
+                    replaceRegexp, pageFile,
+                    fail; 
+
+                while (keys.hasMoreElements()) {
+                    key = keys.nextElement();
+                    value = props.get(key);
+
+                    matches = customJsPrependPropRexp.exec(key);
+
+                    if (matches && matches[2]) {
+                        prepend = "app." + envInfix + "customlibs." + matches[1] + ".js." + matches[2] + ".prepend";
+                    }
+                    else if (matches) {
+                        prepend = "app." + envInfix + "customlibs." + matches[1] + ".js.prepend";
+                    }
+
+                    if (matches) {
+                        prepend = project.getProperty(prepend);
+                        jss.push({
+                            pos     : matches[0],
+                            prepend : prepend
+                        });
+                    }
+
+                    matches = customJsAppendPropRexp.exec(key);
+                    
+                    if (matches && matches[2]) {
+                        append = "app." + envInfix + "customlibs." + matches[1] + ".js." + matches[2] + ".append";
+                    }
+                    else if (matches) {
+                        append = "app." + envInfix + "customlibs." + matches[1] + ".js.append";
+                    }
+
+                    if (matches) {
+                        append = project.getProperty(append);
+                        jss.push({
+                            pos    : matches[0],
+                            append : append
+                        });
+                    }
+                }
+
+                if (jss.length > 0) {
+
+                    prependScripts = [];
+                    appendScripts  = [];
+
+                    jss = jss.sort(function(a, b) {
+                        return a.pos < b.pos ? -1 : 1;
+                    });
+
+                    concatDestFile = new java.io.File(buildOutJsPath);
+
+                    if (!concatDestFile.canWrite()) {
+                        fail = project.createTask('fail');
+                        fail.setMessage("Can't write to " + buildOutJsPath);
+                        fail.perform();
+                    }
+
+                    concat = project.createTask('concat');
+                    concat.setDestfile(concatDestFile);
+                    concat.setOverwrite(true);
+                    concat.setAppend(false);
+                    concat.setEncoding("UTF-8");
+
+                    concatSourceFiles = [];
+
+                    jss.forEach(function(js) {
+                        if (js.prepend) {
+                            concatSourceFile = new java.io.File(js.prepend);
+
+                            if (!concatSourceFile.canRead()) {
+                                fail = project.createTask('fail');
+                                fail.setMessage("Can't read from " + js.prepend);
+                                fail.perform();
+                            }
+
+                            concatSourceFiles.push(js.prepend);
+                            prependScripts.push(['<script title="x-bryntum-customlibs" type="text/javascript" src="', js.prepend, '"></script>'].join(''));
+                        }
+                    });
+
+                    concatSourceFiles.push(buildOutJsPath);
+
+                    jss.forEach(function(js) {
+                        if (js.append) {
+                            concatSourceFile = new java.io.File(js.append);
+
+                            if (!concatSourceFile.canRead()) {
+                                fail = project.createTask('fail');
+                                fail.setMessage("Can't read from " + js.append);
+                                fail.perform();
+                            }
+
+                            concatSourceFiles.push(js.append);
+                            appendScripts.push(['<script title="x-bryntum-customlibs" type="text/javascript" src="', js.append, '"></script>'].join(''));
+                        }
+                    });
+
+                    concatSourceFileset = project.createDataType('fileset');
+                    concatSourceFileset.setDir(project.getBaseDir());
+
+                    concatSourceFiles.forEach(function(concatSourceFile) {
+                        var selector = new org.apache.tools.ant.types.selectors.FilenameSelector();
+                        selector.setName(concatSourceFile);
+                        concatSourceFileset.addFilename(selector);
+                    });
+
+                    concat.addFileset(concatSourceFileset);
+
+                    concat.perform();
+
+                    // Development environment index.html adjustments
+
+                    pageFile = new java.io.File(buildBootstrapPagePath);
+
+                    if (pageFile.canWrite()) {
+                        // Removing previous injected scripts
+
+                        replaceRegexp = project.createTask("replaceregexp");
+                        replaceRegexp.setFile(pageFile);
+                        replaceRegexp.setEncoding('UTF-8');
+                        replaceRegexp.setByLine(false);
+                        replaceRegexp.setFlags('gs');
+                        replaceRegexp.setMatch('\s*<script title="x-bryntum-customlibs"(?:.*?)</script>\\s*');
+                        replaceRegexp.setReplace("");
+                        replaceRegexp.perform();
+
+                        // Injecting new prepend scripts
+                        replaceRegexp = project.createTask("replaceregexp");
+                        replaceRegexp.setFile(pageFile);
+                        replaceRegexp.setEncoding('UTF-8');
+                        replaceRegexp.setByLine(false);
+                        replaceRegexp.setFlags('gs');
+                        replaceRegexp.setMatch("<head([^>]*)>\\s*");
+                        replaceRegexp.setReplace([
+                            "<head\\1>",
+                                "\n    ",
+                                prependScripts.join("\n    "),
+                                "\n    "
+                        ].join(''));
+                        replaceRegexp.perform();
+
+                        // Injection new append scripts
+                        replaceRegexp = project.createTask("replaceregexp");
+                        replaceRegexp.setFile(pageFile);
+                        replaceRegexp.setEncoding('UTF-8');
+                        replaceRegexp.setByLine(false);
+                        replaceRegexp.setFlags('gs');
+                        replaceRegexp.setMatch("\\s*</head>");
+                        replaceRegexp.setReplace([
+                                "\n    ",
+                                appendScripts.join("\n    "),
+                                "\n",
+                                "</head>"
+                        ].join(''));
+                        replaceRegexp.perform();
+                    }                
+                }
+            ]]>
+        </script>
+    </target>
+
+    <target name="-bryntum-remove-customlibs-js-from-build-page">
+        <script language="javascript">
+            <![CDATA[
+                var buildOutPagePath = project.getProperty('build.out.page.path'),
+                    buildOutPageFile = new java.io.File(buildOutPagePath);
+
+                replaceRegexp = project.createTask("replaceregexp");
+                replaceRegexp.setFile(buildOutPageFile);
+                replaceRegexp.setEncoding('UTF-8');
+                replaceRegexp.setByLine(false);
+                replaceRegexp.setFlags('gs');
+                replaceRegexp.setMatch('\s*<script title="x-bryntum-customlibs"(?:.*?)</script>\\s*');
+                replaceRegexp.setReplace("");
+                replaceRegexp.perform();
+            ]]>
+        </script>
+    </target>
+
+    <target name="-bryntum-append-styles-from-custom-libs">
+        <script language="javascript">
+            <![CDATA[
+                var props = project.getProperties(),
+                    keys  = props.keys(),
+                    env   = project.getProperty('app.environment'),
+                    envInfix = (env == "production" ? "" : (env + "\\.")),
+                    customCssPathPropRexp = new RegExp("^app\\." + envInfix + "customlibs\\.(\\d+)\\.css(?:\\.(\\d+))?\\.path$"),
+                    csss = [],
+                    buildOutCssPath = project.getProperty('build.out.css.path'),
+                    concatDestFile,
+                    key, value, matches, from, to,
+                    fail; 
+
+                while (keys.hasMoreElements()) {
+                    key = keys.nextElement();
+                    value = props.get(key);
+
+                    matches = customCssPathPropRexp.exec(key);
+
+                    if (matches && matches[2]) {
+                        from = "app." + envInfix + "customlibs." + matches[1] + ".css." + matches[2] + ".replace.from";
+                        to   = "app." + envInfix + "customlibs." + matches[1] + ".css." + matches[2] + ".replace.to";
+                    }
+                    else if (matches) {
+                        from = "app." + envInfix + "customlibs." + matches[1] + ".css.replace.from";
+                        to   = "app." + envInfix + "customlibs." + matches[1] + ".css.replace.to";
+                    }
+
+                    if (matches) {
+                        from = project.getProperty(from);
+                        to   = project.getProperty(to);
+
+                        if (from && to || !from && !to) {
+                            csss.push({
+                                pos  : matches[0],
+                                path : project.getProperty(key),
+                                from : from,
+                                to   : to
+                            });
+                        }
+                        else {
+                            fail = project.createTask("fail");
+                            fail.setMessage("Custom libs CSS replace instruction must contain both `from` regexp and `to` pattern");
+                            fail.perform();
+                        }
+                    }
+                } 
+
+                if (csss.length > 0) {
+                    concatDestFile = new java.io.File(buildOutCssPath);
+                    if (!concatDestFile.canWrite()) {
+                        fail = project.createTask('fail');
+                        fail.setMessage("Can't write to " + buildOutCssPath);
+                        fail.perform();
+                    }
+
+                    csss = csss.sort(function(a, b) {
+                        return a.pos < b.pos ? -1 : 1;
+                    });
+
+                    csss.forEach(function(css) {
+                        var concat, 
+                            concatSourceFile,
+                            concatSourceFileset,
+                            concatFilterChain, 
+                            concatReplaceRegexpFilter,
+                            filterParam,
+                            echo
+
+                        echo = project.createTask("echo");
+                        if (css.from && css.to) {
+                            echo.setMessage("Appending [" + css.path + "] to [" + buildOutCssPath + "] replacing /" + css.from + "/ with '" + css.to + "'");
+                        }
+                        else {
+                            echo.setMessage("Appending [" + css.path + "] to [" + buildOutCssPath + "]"); 
+                        }
+                        echo.perform();
+
+                        concat = project.createTask("concat");
+                        concat.setDestfile(concatDestFile);
+                        concat.setOverwrite(true);
+                        concat.setAppend(true);
+                        concat.setEncoding("UTF-8");
+
+                        concatSourceFile = new java.io.File(css.path);
+                        concatSourceFileset = project.createDataType("fileset");
+                        concatSourceFileset.setDir(project.getBaseDir());
+                        concatSourceFileset.setFile(concatSourceFile);
+                        concat.addFileset(concatSourceFileset);
+
+                        if (css.from && css.to) {
+                            concatFilterChainRegexpFilter = new org.apache.tools.ant.filters.TokenFilter.ReplaceRegex;
+                            concatFilterChainRegexpFilter.setFlags("mg");
+                            concatFilterChainRegexpFilter.setPattern(css.from);
+                            concatFilterChainRegexpFilter.setReplace(css.to);
+                
+                            concatFilterChain = project.createDataType("filterchain");
+                            concatFilterChain.addReplaceRegex(concatFilterChainRegexpFilter);
+                        }
+
+                        concat.addFilterChain(concatFilterChain);
+                        concat.perform();
+                    });
+                }
+            ]]>
+        </script>
+    </target>
+
+    <target name="-bryntum-copy-resources-from-custom-libs">
+        <script language="javascript">
+            <![CDATA[
+                var props = project.getProperties(),
+                    keys  = props.keys(),
+                    env   = project.getProperty('app.environment'),
+                    envInfix = (env == "production" ? "" : (env + "\\.")),
+                    customResourcesPropRexp = new RegExp("^app\\." + envInfix + "customlibs\\.(\\d+)\\.resources(?:\\.(\\d+))?\\.from$"),
+                    resources = [],
+                    key, value, matches, from, to, incldue, exclude,
+                    fail; 
+
+                while (keys.hasMoreElements()) {
+                    key = keys.nextElement();
+                    value = props.get(key);
+
+                    matches = customResourcesPropRexp.exec(key);
+
+                    if (matches && matches[2]) {
+                        from    = "app." + envInfix + "customlibs." + matches[1] + ".resources." + matches[2] + ".from";
+                        include = "app." + envInfix + "customlibs." + matches[1] + ".resources." + matches[2] + ".include";
+                        exclude = "app." + envInfix + "customlibs." + matches[1] + ".resources." + matches[2] + ".exclude";
+                        to      = "app." + envInfix + "customlibs." + matches[1] + ".resources." + matches[2] + ".to";
+                    }
+                    else if (matches) {
+                        from    = "app." + envInfix + "customlibs." + matches[1] + ".resources.from";
+                        include = "app." + envInfix + "customlibs." + matches[1] + ".resources.include";
+                        exclude = "app." + envInfix + "customlibs." + matches[1] + ".resources.exclude";
+                        to      = "app." + envInfix + "customlibs." + matches[1] + ".resources.to";
+                    }
+
+                    if (matches) {
+                        from    = project.getProperty(from);
+                        include = project.getProperty(include);
+                        exclude = project.getProperty(exclude);
+                        to      = project.getProperty(to);
+
+                        if (from && to) {
+                            resources.push({
+                                pos     : matches[0],
+                                from    : from,
+                                include : include,
+                                exclude : exclude,
+                                to      : to
+                            });
+                        }
+                        else {
+                            fail = project.createTask("fail");
+                            fail.setMessage("Custom libs resources instruction must contain both `from` pattern path and `to` path");
+                            fail.perform();
+                        }
+                    }
+                }
+
+                if (resources.length > 0) {
+                    resources.forEach(function(res) {
+                        var copy,
+                            sourceDir,
+                            destDir,
+                            sourceFileset,
+                            echo, echoMessage = [];
+
+                        echoMessage.push("Copying from [" + res.from + "] to [" + res.to + "]");
+                        res.include && echoMessage.push(" including: " + res.include);
+                        res.exclude && echoMessage.push(" excluding: " + res.exclude);
+                        echo = project.createTask("echo");
+                        echo.setMessage(echoMessage.join(""));
+                        echo.perform();
+
+                        sourceDir = new java.io.File(res.from);
+                        destDir   = new java.io.File(res.to);
+
+                        sourceFileset = project.createDataType('fileset');
+                        sourceFileset.setDir(sourceDir);
+                        res.include && sourceFileset.setIncludes(res.include);
+                        res.exclude && sourceFileset.setExcludes(res.excludes);
+
+                        copy = project.createTask('copy');
+                        copy.setTodir(destDir);
+                        copy.addFileset(sourceFileset);
+
+                        copy.perform();
+                    });
+                }
+            ]]>
+        </script>
+    </target>
+
+</project>
