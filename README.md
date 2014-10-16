@@ -7,14 +7,15 @@ Provides support for new app.json configuration property **customlibs**.
 
 Installation
 ============
-1. Create a Sencha CMD application project, open build.xml file and add the following line.
+1. Create a Sencha CMD application project. 
 2. Copy customlibs.xml into project root directory.
+3. Open build.xml file and add the following line:
 
-    <import file="${basedir}/customlibs.xml"/>
+        <import file="${basedir}/customlibs.xml"/>
 
-**before**
+    **before**
 
-    <import file="${basedir}/.sencha/app/build-impl.xml"/>
+        <import file="${basedir}/.sencha/app/build-impl.xml"/>
 
 Now you can use **customlibs** parameter in the _app.json_ - application build configuration file
 
