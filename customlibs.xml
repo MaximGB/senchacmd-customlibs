@@ -120,7 +120,13 @@
                     key, value, matches, prepend, append, prependScripts, appendScripts,
                     concat, concatSourceFiles, concatSourceFileset, concatSourceFile, concatDestFile,
                     replaceRegexp, pageFile,
-                    fail; 
+                    fail;
+
+                function forEach(fn) {
+                    for (var i = 0, len = this.length; i < len; i++) {
+                        fn(this[i]);
+                    }
+                }
 
                 while (keys.hasMoreElements()) {
                     key = keys.nextElement();
@@ -186,6 +192,7 @@
 
                     concatSourceFiles = [];
 
+                    !jss.forEach && (jss.forEach = forEach);
                     jss.forEach(function(js) {
                         if (js.prepend) {
                             concatSourceFile = new java.io.File(js.prepend);
@@ -221,6 +228,7 @@
                     concatSourceFileset = project.createDataType('fileset');
                     concatSourceFileset.setDir(project.getBaseDir());
 
+                    !concatSourceFiles.forEach && (concatSourceFiles.forEach = forEach);
                     concatSourceFiles.forEach(function(concatSourceFile) {
                         var selector = new org.apache.tools.ant.types.selectors.FilenameSelector();
                         selector.setName(concatSourceFile);
@@ -312,7 +320,13 @@
                     buildOutCssPath = project.getProperty('build.out.css.path'),
                     concatDestFile,
                     key, value, matches, from, to,
-                    fail; 
+                    fail;
+
+                function forEach(fn) {
+                    for (var i = 0, len = this.length; i < len; i++) {
+                        fn(this[i]);
+                    }
+                }
 
                 while (keys.hasMoreElements()) {
                     key = keys.nextElement();
@@ -361,6 +375,7 @@
                         return a.pos < b.pos ? -1 : 1;
                     });
 
+                    !csss.forEach && (csss.forEach = forEach);
                     csss.forEach(function(css) {
                         var concat, 
                             concatSourceFile,
@@ -421,6 +436,12 @@
                     key, value, matches, from, to, incldue, exclude,
                     fail; 
 
+                function forEach(fn) {
+                    for (var i = 0, len = this.length; i < len; i++) {
+                        fn(this[i]);
+                    }
+                }
+
                 while (keys.hasMoreElements()) {
                     key = keys.nextElement();
                     value = props.get(key);
@@ -464,6 +485,7 @@
                 }
 
                 if (resources.length > 0) {
+                    !resources.forEach && (resources.forEach = forEach);
                     resources.forEach(function(res) {
                         var copy,
                             sourceDir,
