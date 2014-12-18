@@ -75,7 +75,8 @@
             // Glob file patterns to exclude
             "exclude" : ".*"
         }
-    }    -->
+    }]
+    -->
 
     <target name="-after-init" depends="-bryntum-alter-classpath-with-custom-libs" />
     <target name="-after-js" depends="-bryntum-append-prepend-js-from-custom-libs" />

@@ -74,4 +74,4 @@ Usage
             // Glob file patterns to exclude
             "exclude" : ".*"
         }
-    }
+    }]
