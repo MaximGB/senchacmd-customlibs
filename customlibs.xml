@@ -179,7 +179,7 @@
 
                     concatDestFile = new java.io.File(buildOutJsPath);
 
-                    if (!concatDestFile.canWrite()) {
+                    if (concatDestFile.exists() && !concatDestFile.canWrite()) {
                         fail = project.createTask('fail');
                         fail.setMessage("Can't write to " + buildOutJsPath);
                         fail.perform();
@@ -366,7 +366,7 @@
 
                 if (csss.length > 0) {
                     concatDestFile = new java.io.File(buildOutCssPath);
-                    if (!concatDestFile.canWrite()) {
+                    if (concatDestFile.exists() && !concatDestFile.canWrite()) {
                         fail = project.createTask('fail');
                         fail.setMessage("Can't write to " + buildOutCssPath);
                         fail.perform();
